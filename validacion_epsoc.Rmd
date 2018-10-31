@@ -156,10 +156,10 @@ Resultados:
        paste("Existen", s.cf$fails[grep("edad", s.cf$expression)], "respondentes"))` fuera del rango etario.
 - `r ifelse(s.cf$fails[grep("durat.*<", s.cf$expression)] == 0, 
        "No existen entrevistas",
-       paste("Existen", s.cf$fails[grep("durat.*<", s.cf$expression)], "entrevistas"))` que duraron más de dos horas.
+       paste("Existen", s.cf$fails[grep("durat.*<", s.cf$expression)], "entrevistas"))` que duraron más de dos horas. Debe revisarse la variable `duration` porque el formato de importación no es estándar ya que algunas duran más de un día. Por ejemplo, una entrevista de 42 horas y 10 minutos queda registrada como `1.18:10:00`.
 - `r ifelse(s.cf$fails[grep("durat.*>", s.cf$expression)] == 0, 
        "No existen entrevistas",
-       paste("Existen", s.cf$fails[grep("durat.*>", s.cf$expression)], "entrevistas"))` que duraron menos de quince minutos.  
+       paste("Existen", s.cf$fails[grep("durat.*>", s.cf$expression)], "entrevistas"))` que duraron menos de quince minutos. Debe revisarse la variable `duration` porque el formato de importación no es estándar ya que algunas duran más de un día. Por ejemplo, una entrevista de 42 horas y 10 minutos queda registrada como `1.18:10:00`.
 - `r ifelse(s.cf$fails[grep("sexo", s.cf$expression)] == 0, 
        "No existen divergencias",
        paste("Existen", s.cf$fails[grep("sexo", s.cf$expression)], "divergencias"))` respecto al sexo del encuestado al comparar la variable `sexo.enc` y `sexo.seleccionado`.         
@@ -193,7 +193,7 @@ knitr::kable(cbind(epsoc$folio[epsoc$duration < "00:15:00"],
 
 
 
-```{r}
+```{r edad}
 ## Fecha de nacimiento y edad seleccionado
 epsoc$enc.edad[as.character(epsoc$enc.edad) == "1582-10-14"] <- NA # comportamiento extraño al importar desde SPSS
 edad <- tibble(Folio = epsoc$folio[is.na(epsoc$enc.edad)],
@@ -206,4 +206,14 @@ knitr::kable(edad,
                       full_width=F)
 ```
 
+```{r sexo}
+knitr::kable(cbind(epsoc$folio[epsoc$sexo.enc != epsoc$sexo.seleccionado],
+                epsoc$sexo.enc[epsoc$sexo.enc != epsoc$sexo.seleccionado],
+                epsoc$sexo.seleccionado[epsoc$sexo.enc != epsoc$sexo.seleccionado]), 
+             col.names = c("Folio", "sexo.enc", "sexo.seleccionado"),
+             caption = "Entrevistas donde sexo encuestado y seleccionado no coinciden") %>% 
+        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                      full_width=F)
+
+```
 
