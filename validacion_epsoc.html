@@ -2300,9 +2300,8 @@ abs(sexo.enc - sexo.seleccionado) &lt; 1e-08
 <p>Resultados:</p>
 <ul>
 <li>No existen respondentes fuera del rango etario.</li>
-<li>Existen 9 entrevistas que duraron más de dos horas.</li>
-<li>Existen 20 entrevistas que duraron menos de quince minutos.<br />
-</li>
+<li>Existen 9 entrevistas que duraron más de dos horas. Debe revisarse la variable <code>duration</code> porque el formato de importación no es estándar ya que algunas duran más de un día. Por ejemplo, una entrevista de 42 horas y 10 minutos queda registrada como <code>1.18:10:00</code>.</li>
+<li>Existen 20 entrevistas que duraron menos de quince minutos. Debe revisarse la variable <code>duration</code> porque el formato de importación no es estándar ya que algunas duran más de un día. Por ejemplo, una entrevista de 42 horas y 10 minutos queda registrada como <code>1.18:10:00</code>.</li>
 <li>Existen 4 divergencias respecto al sexo del encuestado al comparar la variable <code>sexo.enc</code> y <code>sexo.seleccionado</code>.</li>
 </ul>
 <p>Las entrevistas que duran más de dos horas corresponden a los folios:</p>
@@ -2769,6 +2768,77 @@ NA
 </td>
 <td style="text-align:right;">
 21
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>knitr::kable(cbind(epsoc$folio[epsoc$sexo.enc != epsoc$sexo.seleccionado],
+                epsoc$sexo.enc[epsoc$sexo.enc != epsoc$sexo.seleccionado],
+                epsoc$sexo.seleccionado[epsoc$sexo.enc != epsoc$sexo.seleccionado]), 
+             col.names = c(&quot;Folio&quot;, &quot;sexo.enc&quot;, &quot;sexo.seleccionado&quot;),
+             caption = &quot;Entrevistas donde sexo encuestado y seleccionado no coinciden&quot;) %&gt;% 
+        kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;),
+                      full_width=F)</code></pre>
+<table class="table table-striped table-hover table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+Entrevistas donde sexo encuestado y seleccionado no coinciden
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+Folio
+</th>
+<th style="text-align:right;">
+sexo.enc
+</th>
+<th style="text-align:right;">
+sexo.seleccionado
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+902668
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+1301928
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+1301936
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:right;">
+1301944
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+1
 </td>
 </tr>
 </tbody>
