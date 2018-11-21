@@ -19,11 +19,25 @@ Este documento consiste en una revisión del proceso de validación de EPSOC 201
 Se cargan los datos en el formato entregado y se homogeneiza el formato en minúscula y usando puntos ("`.`") para separar en vez de guiones bajos ("`_`").
 
 ```{r cargar}
-pacman::p_load(haven, dplyr, purrr, chron, validate, eeptools, kableExtra, 
-               captioner, ggplot2, lubridate)
+pacman::p_load(tidyverse, lubridate, haven, anytime,
+               sjlabelled, sjmisc,
+               chron, validate, eeptools, kableExtra, janitor, here,
+               captioner)
 path <- "C:/Users/CM/Dropbox/2016 - Mecanismos de legitimación de la desigualdad/EPSOC/datos/"
-epsoc <- read_spss(paste0(path,"181029 - Base EPSOC parcial 1.sav"))
+
+epsoc <-haven::read_spss(here::here('../181115 - EPSOC Base parcial 4.sav')) %>% 
+  clean_names() %>% 
+  mutate(region = folio %/% 100000)
+
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
+```
+
+```{r funciones}
+kable_estilo <- function(tabla){
+  tabla %>% 
+    kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                              full_width=F)
+}
 ```
 
 ```{r etiquetas}
@@ -31,11 +45,70 @@ makeVlist <- function(dta) {
         labels <- sapply(dta, function(x) attr(x, "label"))
         tibble(name = names(labels),
                label = labels)
+        
 }  ## Etiquetas variables
 labs.epsoc <- makeVlist(epsoc)
 labs.epsoc <- labs.epsoc %>% 
-                        mutate(label2 = map_chr(label, toString))
+  mutate(label2 = map_chr(label, toString))
+
+labs.epsoc <- get_label(epsoc)
 ```
+
+# General
+
+La actual base cuenta con `r dim(epsoc)[1]` casos recogidos entre el `r min(as.Date(epsoc$date))` y el `r max(as.Date(epsoc$date))`. 
+
+## Distribución de entrevistas
+
+```{r}
+nrow(epsoc)
+
+epsoc %>% 
+  add_count(region) %>% 
+  add_count(region, sexo.seleccionado) %>% 
+  select(n, nn, everything())
+```
+
+
+```{r}
+epsoc %>% 
+  count(region, status) %>% 
+  spread(status, n) %>% 
+  janitor::adorn_totals(where = c('row', 'col')) %>% 
+  kable() %>% 
+  kable_estilo()
+```
+
+## Duración entrevistas
+
+La distribución de la duración de las entrevistas registrada por las tablets se puede ver en la siguiente figura.
+
+```{r duracion, warning=F}
+# epsoc$dura.d <- ifelse(nchar(epsoc$duration) == 8,
+#                  0, 
+#                  as.numeric(gsub("\\..*$", "", epsoc$duration)))
+# epsoc$duracion <- hms(gsub("^.*\\.", "", epsoc$duration))
+# epsoc$duracion.t <- as.duration(epsoc$duracion + days(epsoc$dura.d))
+# epsoc$duracion.t.min <- epsoc$duracion.t@.Data/60
+
+epsoc <- epsoc %>% 
+  mutate(duration = str_replace_all(duration, c('-' = '', '^(\\d{2})' = '0\\.\\1'))) %>% 
+  separate(duration, into = c('dura.d', 'duracion'), sep = '\\.', convert = TRUE, remove = FALSE) %>% 
+  mutate(duracion.t = as.duration(hms(duracion) +  hms(hms::hms(hour = (24 * dura.d)))))
+
+epsoc %>% 
+  ggplot(aes(x = duracion.t, fill = as_factor(region))) + 
+  geom_histogram(binwidth = 5 * 60) +
+  theme_bw() +
+  labs(title = "Distribución duración entrevistas (escala truncada < 150 minutos)",
+       x = "Duración total entrevista (minutos)",
+       y = "Frecuencia") +
+  scale_x_time(limits = c(0, 150 * 60),
+               breaks = seq(0, 150 * 60, by = 15 * 60)) +
+  scale_fill_viridis_d(name = 'Región', end = .8)
+```
+
+Existen `r sum(epsoc$duracion.t@.Data < 15*60, na.rm = TRUE)` entrevistas que duran menos de 20 minutos, estas debieran ser supervisadas
 
 # Experimentos
 
@@ -54,49 +127,75 @@ Para validar el proceso con las viñetas necesitamos:
 - Los marcadores de tiempo `time2` y `time3` no siguen un formato homogéneo para registrar la hora. Por ejemplo, en algún caso se utiliza el formato "2018-10-27T19:05:08-03:00" y en otros "Fri Oct 19 13:01:59 -0300 2018"
 - Homogeneizar formatos de tiempos y fechas a ISO8601
 
+Homogeneizar fechas
+
+```{r}
+homologar_fechas <- function(fecha){
+  fecha %>% 
+    str_replace_all(c("^\\D{3} " = "", '(.*)(\\d{4}$)' = '\\2 \\1')) %>% 
+    anytime::anytime()
+}
+
+epsoc <- epsoc %>% 
+  mutate_at(vars(starts_with('time')), homologar_fechas)
+```
 
 ```{r dura.vineta, warning=F}
 ## Comienzo viñetas
-epsoc$time2 <- ifelse(nchar(epsoc$time2) == 30, 
-                      as.character(strptime(epsoc$time2,
-                              format = "%a %b %d %H:%M:%S %z %Y")), 
-                      as.character(ymd_hms(epsoc$time2)-hours(3)))
-epsoc$time2 <- as_datetime(epsoc$time2)
-epsoc$time2.hms <- format(epsoc$time2, format = "%H:%M:%S")
-epsoc$time2.hms <- as.POSIXct(epsoc$time2.hms, format = "%H:%M:%S")
-epsoc$time2.dmy <- dmy(format(epsoc$time2, format = "%d-%m-%y"))
+epsoc$time2.hms <- hms::as.hms(epsoc$time2)
+epsoc$time2.dmy <- date(epsoc$time2)
 
 ## Fin viñetas
-epsoc$time3 <- ifelse(nchar(epsoc$time3) == 30, 
-                      as.character(strptime(epsoc$time3,
-                                            format = "%a %b %d %H:%M:%S %z %Y")), 
-                      as.character(ymd_hms(epsoc$time3)-hours(3)))
-epsoc$time3 <- as_datetime(epsoc$time3)
-epsoc$time3.hms <- format(epsoc$time3, format = "%H:%M:%S")
-epsoc$time3.hms <- as.POSIXct(epsoc$time3.hms, format = "%H:%M:%S")
-epsoc$time3.dmy <- dmy(format(epsoc$time3, format = "%d-%m-%y"))
+epsoc$time3.hms <- hms::as.hms(epsoc$time3)
+epsoc$time3.dmy <- date(epsoc$time3)
 
 epsoc$dura.vinetas <- difftime(epsoc$time3, epsoc$time2,
                                units = "mins")
-ggplot(epsoc, aes(x = time2.dmy, y = time2.hms)) + geom_point() +
-        labs(x = "Día", y = "Hora") + 
-        ggtitle("Día y hora comienzo actividad viñetas") + 
-        theme_bw()
 
+summary(as.double(epsoc$dura.vinetas))
 ```
 
+```{r inicio.vineta.dia, warning=F}
+ggplot(epsoc, aes(x = time2.dmy, y = time2.hms)) + 
+  geom_point() +
+  labs(x = "Día", y = "Hora") + 
+  ggtitle("Día y hora comienzo actividad viñetas") + 
+  theme_minimal()
+```
 
-```{r plot.dura, message = F}
+```{r inicio.vineta.srvyr, warning=F}
+ggplot(epsoc, aes(x = srvyr, y = time2.hms, colour = as_factor(region))) + 
+  geom_point() +
+  geom_smooth(aes(group = region), method = 'loess') + 
+  scale_colour_viridis_d(guide = 'none', end = .8) +
+  labs(x = "Encuestador", y = "Hora") + 
+  ggtitle("Hora comienzo actividad viñetas según encuestador") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_grid(cols = vars(region), scales = 'free_x', space = 'free_x')
+```
+
+```{r dura.vineta.hist, message = F}
 epsoc %>% 
-        mutate(vin.cort = ifelse(dura.vinetas < 5, "< 5'", ">= 5'")) %>% 
-        ggplot(aes(dura.vinetas)) + 
-                geom_histogram(aes(fill = vin.cort)) + theme_bw() +
-                theme(legend.title=element_blank()) +
-                ggtitle("Duración ejercicio viñetas") +
-                xlab("Minutos")
+  mutate(vin.cort = ifelse(dura.vinetas < 5, "< 5'", ">= 5'")) %>% 
+  ggplot(aes(dura.vinetas)) + 
+  geom_histogram(aes(fill = vin.cort)) + theme_bw() +
+  theme(legend.title=element_blank()) +
+  ggtitle("Duración ejercicio viñetas") +
+  xlab("Minutos")
 ```
 
 Como se puede ver en la figura anterior, la distribución del tiempo de duración del ejercicio de viñetas es variable. En términos de validación, llama la atención que se logre realizar el ejercicio en menos de cinco minutos. Estos casos deberían ser revisados apenas sea posible.
+
+```{r dura.vineta.srvyr, warning=F}
+ggplot(epsoc, aes(x = srvyr, y = dura.vinetas)) + 
+  geom_point() +
+  geom_hline(yintercept = hms::as.hms(5), colour = 'red') + 
+  labs(x = "Encuestador", y = "minutos") + 
+  ggtitle("Duración de actividad viñetas según encuestador") + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90))
+```
 
 ## Evaluación de justicia
 
@@ -109,7 +208,8 @@ Para validar el experimento de evaluación de justicia necesitamos:
 La encuesta considera una serie de preguntas con escalas predefinidas. A continuación se revisa que los ítems sobre justicia tengan respuestas en el rango de 1 a 5 o bien valores de 8 o 9.
 
 ```{r}
-item.just <- flatten_chr(labs.epsoc[grep("usto", labs.epsoc$label2),1])
+var.just <- find_var(epsoc, pattern = "usto", out = 'index') %>% names()
+
 v <- validator(j := var_group(i.6.a1, i.8.a1, i.9.a1,  i.10.a1, i.11.a1, i.12.a1,
                               i.13.a1, i.16.a1, i.1.h1, i.2.h1, i.5.h1, i.7.h1, 
                               i.8.h1, i.10.h1, i.11.h1, i.12.h1, i.14.h1), 
@@ -119,13 +219,12 @@ v <- validator(j := var_group(i.6.a1, i.8.a1, i.9.a1,  i.10.a1, i.11.a1, i.12.a1
                j != 7)
 cf2 <- confront(epsoc, v)
 s.cf2 <- summary(cf2)
+
 knitr::kable(s.cf2) %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F)
+  kable_estilo()
 ```
 
 Existen `r length(s.cf2$fails[s.cf2$fails > 0])` variables de actitudes sobre justicia fuera de rango.
-
 
 # Otros criterios generales
 
@@ -138,16 +237,18 @@ Para validar los datos consideramos los siguientes criterios:
 
 ```{r}
 epsoc$duration <- chron(times=epsoc$duration)
-cf <- check_that(epsoc, edad.seleccionado <= 59 & edad.seleccionado >= 18,
+
+cf <- check_that(epsoc, 
+                 edad.seleccionado <= 59 & edad.seleccionado >= 18,
                  duration < "02:00:00",
                  duration > "00:15:00",
                  sexo.enc == sexo.seleccionado)
-s.cf <- summary(cf)
-knitr::kable(s.cf) %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F)
-```
 
+s.cf <- summary(cf)
+
+knitr::kable(s.cf) %>% 
+  kable_estilo()
+```
 
 Resultados:
 
@@ -167,53 +268,59 @@ Resultados:
 Las entrevistas que duran más de dos horas corresponden a los folios:
 
 ```{r entr.largas}
-knitr::kable(cbind(epsoc$folio[epsoc$duration > "02:00:00"],
-                as.character(epsoc$duration[epsoc$duration > "02:00:00"])), 
-             col.names = c("Folio", "Duración"),
-             caption = "Entrevistas de más de dos horas") %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F) %>% 
-        column_spec(1, width = "10em") %>% 
-        column_spec(2, width = "10em")
-
+epsoc %>% 
+  filter(duration > '2:00:00') %>% 
+  select(Folio = folio, Duración = duration) %>% 
+  knitr::kable(caption = "Entrevistas de más de dos horas") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width=F) %>% 
+  column_spec(1, width = "10em") %>% 
+  column_spec(2, width = "10em")
 ```
 
 Las entrevistas que duran menos de quince minutos corresponden a los folios:
 
 ```{r entr.cortas}
-knitr::kable(cbind(epsoc$folio[epsoc$duration < "00:15:00"],
-                as.character(epsoc$duration[epsoc$duration < "00:15:00"])), 
-             col.names = c("Folio", "Duración"),
-             caption = "Entrevistas de menos de quince minutos") %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F) %>% 
-        column_spec(1, width = "10em") %>% 
-        column_spec(2, width = "10em")
+epsoc %>% 
+  filter(duration < '0:15:00') %>% 
+  select(Folio = folio, Duración = duration) %>% 
+  knitr::kable(caption = "Entrevistas de menos de quince minutos") %>% 
+  kable_estilo() %>% 
+  column_spec(1, width = "10em") %>% 
+  column_spec(2, width = "10em")
 ```
-
-
 
 ```{r edad}
 ## Fecha de nacimiento y edad seleccionado
 epsoc$enc.edad[as.character(epsoc$enc.edad) == "1582-10-14"] <- NA # comportamiento extraño al importar desde SPSS
-edad <- tibble(Folio = epsoc$folio[is.na(epsoc$enc.edad)],
-        Fecha = epsoc$enc.edad[is.na(epsoc$enc.edad)],
-        Edad = epsoc$edad.seleccionado[is.na(epsoc$enc.edad)]) 
-knitr::kable(edad,
-             caption = "Casos sin fecha de nacimiento en `enc_edad`",
-             col.names = c("Folio", "Fecha nacimiento", "Edad")) %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F)
+
+epsoc %>% 
+  filter(is.na(enc.edad)) %>% 
+  select(Folio = folio, `Fecha de nacimiento` = enc.edad, Edad = edad.seleccionado) %>% 
+  knitr::kable(caption = "Casos sin fecha de nacimiento en `enc_edad`") %>% 
+  kable_estilo()
 ```
 
 ```{r sexo}
-knitr::kable(cbind(epsoc$folio[epsoc$sexo.enc != epsoc$sexo.seleccionado],
-                epsoc$sexo.enc[epsoc$sexo.enc != epsoc$sexo.seleccionado],
-                epsoc$sexo.seleccionado[epsoc$sexo.enc != epsoc$sexo.seleccionado]), 
-             col.names = c("Folio", "sexo.enc", "sexo.seleccionado"),
-             caption = "Entrevistas donde sexo encuestado y seleccionado no coinciden") %>% 
-        kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                      full_width=F)
-
+epsoc %>% 
+  filter(sexo.enc != sexo.seleccionado) %>% 
+  select(Folio = folio, sexo.enc, sexo.seleccionado) %>% 
+  knitr::kable(caption = "Entrevistas donde sexo encuestado y seleccionado no coinciden") %>% 
+  kable_estilo()
 ```
 
+# Grabaciones
+
+Obtención de archivos de grabaciones de cada encuesta.
+
+```{r}
+path_general <- '../SurveyToGo Attachments/EPSOC 2018/'
+
+archivos <- dir(path = path_general, 
+    pattern = str_c(epsoc$sbj.num, collapse = '|'),
+    recursive = TRUE)
+
+file.copy(from = str_c(path_general, archivos), 
+          to = "grabaciones/",
+          overwrite = TRUE)
+```
