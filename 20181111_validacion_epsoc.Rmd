@@ -21,8 +21,8 @@ Se cargan los datos en el formato entregado y se homogeneiza el formato en minú
 ```{r cargar}
 pacman::p_load(haven, dplyr, purrr, chron, validate, eeptools, kableExtra, 
                captioner, ggplot2, lubridate)
-path <- "C:/Users/CM/Dropbox/2016 - Mecanismos de legitimación de la desigualdad/EPSOC/datos/"
-epsoc3 <- read_spss(paste0(path,"181108 - EPSOC Base parcial 3.sav"))
+path <- "C:/Users/CM/Dropbox/2016 - Mecanismos de legitimación de la desigualdad/EPSOC/datos"
+epsoc3 <- read_spss(paste0(path,"181122 - EPSOC Base parcial 5.sav"))
 
 names(epsoc3) <- tolower(gsub("_", ".", names(epsoc3)))
 ```
