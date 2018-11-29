@@ -193,7 +193,7 @@ epsoc4_geo %>%
   geom_sf()
 ```
 
-### Antofagasta
+### Santiago
 
 ```{r}
 epsoc4_geo %>% 
