@@ -31,7 +31,7 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
 }
 
-epsoc4 <-haven::read_spss(paste0(path, '181122 - EPSOC Base parcial 5.sav')) %>% 
+epsoc4 <-haven::read_spss(paste0(path, '181206 - EPSOC Base parcial 7.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000)
 
