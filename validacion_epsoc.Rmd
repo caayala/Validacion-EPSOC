@@ -1,6 +1,6 @@
 ---
 title: "Validación EPSOC"
-author: "Cristóbal Moya"
+author: "Equipo EPSOC"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output: 
   html_document:
@@ -31,7 +31,7 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
 }
 
-epsoc <-haven::read_spss(paste0(path, '190110 - EPSOC Base parcial 12.sav')) %>% 
+epsoc <-haven::read_spss(paste0(path, '190117 - EPSOC Base parcial 13.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000)
 
@@ -74,6 +74,40 @@ epsoc %>%
   kable() %>% 
   kable_estilo()
 ```
+
+## Distribución encuestado
+
+```{r}
+epsoc <- epsoc %>% 
+  mutate(rango_edad = rec(edad.seleccionado,
+                          rec = "1:17 =  1[menor de 18 años];
+                                 18:24 = 2[18 a 24 años]; 
+                                 25:44 = 3[25 a 44 años];
+                                 45:59 = 4[45 a 59 años]"))
+
+frq(epsoc, rango_edad)
+```
+
+```{r}
+epsoc %>% 
+  filter(is.na(rango_edad)) %>%
+  select(sexo.seleccionado, edad.seleccionado, situacion.laboral.seleccionado)
+```
+
+Probablemente discrepancia de edad para las personas mayores de 59 años se debe a una confusión entre edad reportada o fecha de cumpleaños. Quedarán asignados al grupo de edad `rango_edad == 4`.
+
+```{r}
+epsoc <- epsoc %>% 
+  mutate(rango_edad = replace(rango_edad, edad.seleccionado %in% c(60, 61), 4))
+
+epsoc %>% 
+  count(sexo.seleccionado, rango_edad, situacion.laboral.seleccionado) %>% 
+  mutate_all(as_label) %>% 
+  mutate(prop = round(n/sum(n), 4)) %>% 
+  kable() %>% 
+  kable_estilo()
+```
+
 
 
 ## Duración entrevistas
@@ -258,6 +292,13 @@ Revisar la distribución efectiva captada de los decks de viñetas en terreno ha
 
 ```{r}
 epsoc %>% 
+  select(folio, i.1.grupo) %>% 
+  head()
+```
+
+
+```{r}
+epsoc %>% 
   transmute(i.1.grupo = as.integer(i.1.grupo),
             region) %>% 
   group_by_all() %>% 
@@ -306,8 +347,7 @@ ggplot(epsoc, aes(x = srvyr, y = time2.hms)) +
   labs(x = "Encuestador", y = "Hora") + 
   ggtitle("Hora comienzo actividad viñetas según encuestador") + 
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90))
-
+  theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1))
 ```
 ```{r plot.dura, message = F}
 epsoc %>% 
@@ -324,14 +364,15 @@ Como se puede ver en la figura anterior, la distribución del tiempo de duració
 
 ```{r plot.dura.enc}
 ggplot(epsoc, aes(x = srvyr, y = dura.vinetas, 
-                   colour = as_factor(region), shape = status)) + 
+                  colour = status)) + 
   geom_point(alpha = 0.5,
              position = position_jitter(width = .2)) +
+  scale_color_manual(values = c('green', 'orange', 'blue')) + 
+  facet_grid(cols = vars(region), scales = 'free_x', space = 'free_x') +
   labs(x = "Encuestador", y = "minutos") + 
   ggtitle("Duración de actividad viñetas según encuestador según región") + 
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90)) +
-  facet_grid(cols = vars(region), scales = 'free_x', space = 'free_x')
+  theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1))
 ```
 
 En particular, deben supervisarse las siguientes entrevistas donde el ejercicio duró menos de 10 minutos:
@@ -389,7 +430,8 @@ epsoc %>%
   arrange(num.grupo.jd, time1) %>% 
   select(one_of(var_rec_justa$var.name)) %>% 
   naniar::vis_miss() +
-  labs(title = 'Distribución de respuestas en preguntas de recompensa justa')
+  labs(title = 'Distribución de respuestas en preguntas de recompensa justa') +
+  theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 0))
 ```
 
 ## Items justicia
