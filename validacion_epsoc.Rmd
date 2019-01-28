@@ -31,9 +31,10 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
 }
 
-epsoc <-haven::read_spss(paste0(path, '190117 - EPSOC Base parcial 13.sav')) %>% 
+epsoc <-haven::read_spss(paste0(path, '190124 - EPSOC Base parcial 14.sav')) %>% 
   clean_names() %>% 
-  mutate(region = folio %/% 100000)
+  mutate(region = folio %/% 100000,
+         i_1_orden = as.integer(i_1_orden))
 
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
 
@@ -313,9 +314,6 @@ epsoc %>%
   labs(title = 'Distribución de viñetas')
 ```
 
-
-
-
 ### Duración ejercicio
 
 - Los marcadores de tiempo `time2` y `time3` no siguen un formato homogéneo para registrar la hora. Por ejemplo, en algún caso se utiliza el formato "2018-10-27T19:05:08-03:00" y en otros "Fri Oct 19 13:01:59 -0300 2018"
@@ -392,6 +390,173 @@ kable(epsoc %>%
 #column_spec(1, width = "10em") %>% 
 #column_spec(2, width = "10em") %>% 
 #column_spec(3, width = "10em")
+```
+
+### Reconstrucción de variables de outcome
+
+```{r}
+labels_correcion <- function(.vect) {
+  replace(.vect, .vect == 6, -1) %>% 
+    remove_labels(labels = '- 1') %>% 
+    add_labels(labels = c('- 1' = -1))
+}
+```
+
+#### Ideología para ego y alter
+
+```{r}
+ideologia_ego <- list(orden1 = c("c0.1", "c1.1.1", "c1.2.1", "c1.3.1", "c1.4.1", "c2.1.1", "c2.2.1", "c2.3.1", "c2.4.1"),
+                      orden2 = c("c0.2", "c1.4.2", "c1.1.2", "c1.2.2", "c1.3.2", "c2.4.2", "c2.1.2", "c2.2.2", "c2.3.2"),
+                      orden3 = c("c0.3", "c1.3.3", "c1.4.3", "c1.1.3", "c1.2.3", "c2.3.3", "c2.4.3", "c2.1.3", "c2.2.3"), 
+                      orden4 = c("c0.4", "c1.2.4", "c1.3.4", "c1.4.4", "c1.1.4", "c2.2.4", "c2.3.4", "c2.4.4", "c2.1.4"))
+
+df_ideologia_ego <- epsoc %>% 
+  select(folio, i.1.orden, !!!flatten_chr(ideologia_ego)) %>% 
+  nest(-i.1.orden) %>% 
+  arrange(i.1.orden)
+
+df_ideologia_ego <- df_ideologia_ego %>% 
+  mutate(orden = ideologia_ego[str_glue("orden{i.1.orden + 1}")],
+         data = map2(data, orden, ~select(.x, one_of("folio", .y))),
+         data_var = map(data, names) %>% map_chr(str_c, collapse = ', '))
+
+df_ideologia_ego
+```
+```{r}
+map_dfc(df_ideologia_ego$data, get_label) %>% 
+  mutate_all(str_trunc, width = 25)
+```
+
+
+```{r}
+suppressWarnings(
+  df_ideologia_ego <- df_ideologia_ego %>% 
+    mutate(data = map(data, ~rename_all(.x, ~c("folio", str_remove(ideologia_ego$orden1,'.\\d{1,2}$'))))) %>% 
+    select(data) %>% 
+    unnest()
+)
+
+df_ideologia_ego <- copy_labels(df_new = df_ideologia_ego,
+                                df_origin = epsoc %>% 
+                                  select(one_of(c('folio', ideologia_ego$orden1))) %>% 
+                                  rename_all(~c("folio", str_remove(ideologia_ego$orden1,'.\\d{1,2}$'))))
+```
+
+Agregar variables reconstruidas a base de datos.
+
+```{r}
+epsoc <- left_join(epsoc, 
+                   df_ideologia_ego,
+                   by = 'folio')
+
+gg_ideologia_orden <- function(.data, var_orden, miss = 88){
+  var_orden_quo <- enquo(var_orden)
+  
+  .data %>% 
+    gather('variable', 'valor', -!!var_orden_quo) %>% 
+    filter(valor < miss) %>%
+    ggplot(aes(x = valor)) +
+    geom_bar() +
+    facet_grid(rows = vars(variable),
+               cols = vars(!!var_orden_quo))
+}
+
+epsoc %>% 
+  select(i.1.orden, matches("c1.\\d{1}$")) %>% 
+  gg_ideologia_orden(i.1.orden) +
+  labs(title = 'Distribución de viñetas ego y alter, según orden de preguntas')
+```
+
+#### Ideología para viñetas
+
+Primero es necesario reunir las variables
+
+```{r}
+ideologia_vin <- list(orden1 = c(1, 2, 3, 4),
+                      orden2 = c(4, 1, 2, 3),
+                      orden3 = c(3, 4, 1, 2), 
+                      orden4 = c(2, 3, 4, 1))
+
+df_ideologia_vin <- epsoc %>% 
+  select(folio, i.1.orden, matches("^c([3-9]|10)\\.[1-4].*")) %>% 
+  nest(-i.1.orden) %>% 
+  arrange(i.1.orden)
+
+ideologia_variables <- function(persona, orden, grupo){
+  expand.grid(persona, orden, grupo) %>% 
+  arrange(Var1) %>% 
+  str_glue_data("c{Var1}.{Var2}.{Var3}")
+}
+
+df_ideologia_vin <- df_ideologia_vin %>% 
+  mutate(orden = ideologia_vin[str_glue("orden{i.1.orden + 1}")],
+         variables = map2(orden, i.1.orden + 1, ~ideologia_variables(3:10, .x, .y)),
+         data = map2(data, variables, ~select(.x, one_of("folio", .y))),
+         data_var = map(data, names) %>% map_chr(str_c, collapse = ', '))
+
+df_ideologia_vin %>% 
+  select(i.1.orden, data_var)
+```
+
+```{r}
+etiquetas <- map(df_ideologia_vin$data, get_labels)
+```
+
+```{r}
+ideologia_vin1_names <- names(df_ideologia_vin$data[[1]])
+ideologia_vin1_gen_names <- str_remove(ideologia_vin1_names, '.\\d{1,2}$')
+
+suppressWarnings(
+  df_ideologia_vin <- df_ideologia_vin %>% 
+    mutate(data = map(data, ~rename_all(.x, ~ideologia_vin1_gen_names))) %>% 
+    select(data) %>% 
+    unnest()
+)
+
+df_ideologia_vin <- copy_labels(df_new = df_ideologia_vin,
+                                df_origin = epsoc %>% 
+                                  select(!!!ideologia_vin1_names) %>% 
+                                  rename_all(~ideologia_vin1_gen_names))
+
+head(df_ideologia_vin)
+```
+
+Agregar variables reconstruidas a base de datos.
+
+```{r}
+epsoc <- left_join(epsoc, 
+                   df_ideologia_vin,
+                   by = 'folio')
+```
+
+Gráficos para comparar distribuciones entre viñetas y orden
+
+```{r}
+epsoc %>% 
+  select(i.1.orden, matches('c([3-9]|10).1$')) %>% 
+  gg_ideologia_orden(i.1.orden) +
+  labs(title = 'Distribución de viñetas Familias, según orden de preguntas')
+```
+
+```{r}
+epsoc %>% 
+  select(i.1.orden, matches('c([3-9]|10).2$')) %>% 
+  gg_ideologia_orden(i.1.orden) +
+  labs(title = 'Distribución de viñetas Orden o Cambio, según orden de preguntas')
+```
+
+```{r}
+epsoc %>% 
+  select(i.1.orden, matches('c([3-9]|10).3$')) %>% 
+  gg_ideologia_orden(i.1.orden) +
+  labs(title = 'Distribución de viñetas Educación, según orden de preguntas')
+```
+
+```{r}
+epsoc %>% 
+  select(i.1.orden, matches('c([3-9]|10).4$')) %>% 
+  gg_ideologia_orden(i.1.orden) +
+  labs(title = 'Distribución de viñetas Grandes Empresas, según orden de preguntas')
 ```
 
 ## Recompensa justa
@@ -513,7 +678,15 @@ epsoc %>%
 
 # Grabaciones
 
- Obtención de archivos de grabaciones de cada encuesta.
+Grabar base de datos con variables de viñetas reconstruidas.
+
+```{r}
+epsoc %>% 
+  mutate_if(is.numeric, as_labelled) %>% 
+  haven::write_sav("../EPSOC Base parcial con vinetas.sav")
+```
+
+Obtención de archivos de grabaciones de cada encuesta.
 
 ```{r, eval=Sys.info()[["user"]] %in% c('caayala', 'Andres')&grabacion}
  path_general <- '../SurveyToGo Attachments/EPSOC 2018/'
