@@ -31,14 +31,14 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
 }
 
-epsoc <-haven::read_spss(paste0(path, '190205 - EPSOC Base parcial 16.sav')) %>% 
+epsoc <-haven::read_spss(paste0(path, '190207 - EPSOC Base parcial 17.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000,
          i_1_orden = as.integer(i_1_orden))
 
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
 
-grabacion <- FALSE
+grabacion <- TRUE
 ```
 
 ```{r funciones}
@@ -698,7 +698,7 @@ frq(epsoc$f22)
 ```{r}
 hijos <- epsoc %>%
   select(folio, f22:f26.o5) %>%
-  mutate(hijo_n       = ifelse(f22 <= 7, f22 - 1, NA),
+  mutate(hijo_n       = ifelse(f22 <= 6, f22 - 1, NA),
          hijo_estudia = ifelse(f23 <= 7, f23 - 1, NA),
          hijo_egreso  = ifelse(f25 <= 7, f25 - 1, NA),
          hijo_suma    = hijo_estudia + hijo_egreso) %>%
