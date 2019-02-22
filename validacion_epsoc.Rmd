@@ -26,19 +26,19 @@ pacman::p_load(tidyverse, lubridate, anytime, chron,
                captioner)
 
 if(Sys.info()[["user"]] == 'caayala'){
-  path <- "/Users/caayala/Dropbox (DESUC)/DESUC/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
+  path <- "/Users/caayala/Dropbox (DESUC)/DESUC/Proyectos/3 Politicas Publicas/EPSOC 2018/BD"
 } else if(Sys.info()[["user"]] == 'Andres') {
-  path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Políticas Públicas/EPSOC 2018/BD/"
+  path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Politicas Publicas/EPSOC 2018/BD"
 }
 
-epsoc <-haven::read_spss(paste0(path, '190207 - EPSOC Base parcial 17.sav')) %>% 
+epsoc <-haven::read_spss(file.path(path, '190221 - EPSOC Base parcial 19.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000,
          i_1_orden = as.integer(i_1_orden))
 
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
 
-grabacion <- TRUE
+grabacion <- FALSE
 ```
 
 ```{r funciones}
@@ -716,19 +716,24 @@ Grabar base de datos con variables de viñetas reconstruidas.
 ```{r}
 epsoc %>% 
   mutate_if(is.numeric, as_labelled) %>% 
-  haven::write_sav("../EPSOC Base parcial con vinetas.sav")
+  haven::write_sav(file.path(path, "EPSOC Base parcial con vinetas.sav"))
 ```
 
-Obtención de archivos de grabaciones de cada encuesta.
+# Obtención de archivos de grabaciones de cada encuesta.
 
-```{r, eval=Sys.info()[["user"]] %in% c('caayala', 'Andres')&grabacion}
- path_general <- '../SurveyToGo Attachments/EPSOC 2018/'
+```{r, eval=(Sys.info()[["user"]] %in% c('caayala', 'Andres')) & grabacion}
+archivos <- dir(path = file.path(path, 'SurveyToGo Attachments', 'EPSOC'),
+                recursive = TRUE)
 
- archivos <- dir(path = path_general, 
-     pattern = str_c(epsoc$sbj.num, collapse = '|'),
-     recursive = TRUE)
- 
- file.copy(from = str_c(path_general, archivos), 
-           to = "grabaciones/",
-           overwrite = TRUE)
+# Códigos de encuestas válidas
+epsoc_sbj.num_sort <- paste0("S", sort(epsoc$sbj.num))
+
+# Extracción de archivos válidos
+archivos_Validos <- archivos[(str_extract(archivos, "(?=S).*(?=_)") %in% epsoc_sbj.num_sort)]
+  
+copia <-  file.copy(from = file.path(path, 'SurveyToGo Attachments', 'EPSOC', archivos_Validos),
+                    to = file.path(path, "Validacion-EPSOC", "grabaciones"),
+                    overwrite = TRUE)
+
+sum(copia)
 ```
