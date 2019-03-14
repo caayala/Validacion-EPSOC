@@ -31,14 +31,14 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Politicas Publicas/EPSOC 2018/BD"
 }
 
-epsoc <-haven::read_spss(file.path(path, '190221 - EPSOC Base parcial 19.sav')) %>% 
+epsoc <-haven::read_spss(file.path(path, '190314 - EPSOC Base parcial 22.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000,
          i_1_orden = as.integer(i_1_orden))
 
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
 
-grabacion <- FALSE
+grabacion <- TRUE
 ```
 
 ```{r funciones}
@@ -66,6 +66,13 @@ labs.epsoc <- get_label(epsoc)
 # General
 
 La actual base cuenta con `r dim(epsoc)[1]` casos recogidos entre el `r min(as.Date(epsoc$date))` y el `r max(as.Date(epsoc$date))`. 
+
+## Filtro de casos posiblemente duplicados
+
+```{r}
+epsoc <- epsoc %>% 
+  filter(duplicated(epsoc$folio, incomparables = FALSE) == FALSE)
+```
 
 ```{r entrev_regiones}
 epsoc %>% 
@@ -373,14 +380,14 @@ ggplot(epsoc, aes(x = srvyr, y = if_else(dura.vinetas < 60, dura.vinetas, 60),
   theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1))
 ```
 
-En particular, deben supervisarse las siguientes entrevistas donde el ejercicio duró menos de 5 minutos:
+En particular, deben supervisarse las siguientes entrevistas donde el ejercicio duró menos de 4 minutos:
 
 ```{r}
 kable(epsoc %>% 
         group_by(srvyr) %>% 
         mutate(n.enc = length(folio)) %>% 
         select(folio, dura.vinetas, srvyr, n.enc) %>% 
-        filter(dura.vinetas <= 5) %>%
+        filter(dura.vinetas <= 4) %>%
         mutate(n.enc.cort = (length(folio)/n.enc)*100) %>% 
         arrange(srvyr, dura.vinetas), 
       digits = 1,
@@ -708,6 +715,24 @@ hijos %>%
   select(folio, starts_with('hijo')) %>% 
   arrange(desc(abs(hijo_n - hijo_suma)))
 ```
+# Corrección de situación laboral
+
+```{r}
+epsoc <- epsoc %>% 
+  mutate(situacion.laboral.seleccionado.2 = rec(f2, 
+                      rec = "1:3 = 1[Trabaja];
+                      4 = 2 [No trabaja];
+                      8 = 2 [No trabaja];
+                      9 = 2 [No trabaja];
+                      else = 3 [Caso especial]"))
+```
+
+```{r}
+epsoc %>% 
+  flat_table(situacion.laboral.seleccionado,situacion.laboral.seleccionado.2)
+```
+
+
 
 # Grabaciones
 
