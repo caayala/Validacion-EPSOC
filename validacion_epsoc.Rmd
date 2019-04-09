@@ -31,14 +31,40 @@ if(Sys.info()[["user"]] == 'caayala'){
   path <- "/Users/Andres/Dropbox (DESUC)/Proyectos/3 Politicas Publicas/EPSOC 2018/BD"
 }
 
-epsoc <-haven::read_spss(file.path(path, '190314 - EPSOC Base parcial 22.sav')) %>% 
+epsoc <-haven::read_spss(file.path(path, '190404 - EPSOC Base parcial 25.sav')) %>% 
   clean_names() %>% 
   mutate(region = folio %/% 100000,
+         region = labelled(region, 
+                           labels = c('Antofagasta' = 2, 
+                                      'Araucanía'= 9,
+                                      'Metropolitana' = 13),
+                           label = 'Región'),
+         manzana = folio %/% 100,
          i_1_orden = as.integer(i_1_orden))
 
 names(epsoc) <- tolower(gsub("_", ".", names(epsoc)))
 
-grabacion <- TRUE
+# Agregar datos de la muestra a encuesta
+suppressMessages(
+  epsoc_muestra <- read_csv('../03-muestra_epsoc.csv')
+)
+
+epsoc <- left_join(epsoc,
+                   epsoc_muestra %>% select(manzana = folio, estrato, sector),
+                   by = 'manzana')
+
+epsoc <- epsoc %>% 
+  mutate(estrato = labelled(estrato, 
+                            labels = c('Antofagasta - Bajo'    = 21,
+                                       'Antofagasta - Medio'   = 22,
+                                       'Temuco - Bajo'         = 91,
+                                       'Temuco - Medio'        = 92,
+                                       'Gran Santiago - Bajo'  = 131,
+                                       'Gran Santiago - Medio' = 132,
+                                       'Gran Santiago - Alto'  = 133),
+                            label = 'Estratos de muestreo (Ciudad - nivel educacional de los jefes de hogar de las zonas censales)'))
+
+grabacion <- FALSE
 ```
 
 ```{r funciones}
@@ -55,7 +81,9 @@ makeVlist <- function(dta) {
         tibble(name = names(labels),
                label = labels)
         
-}  ## Etiquetas variables
+}  
+
+## Etiquetas variables
 labs.epsoc <- makeVlist(epsoc)
 labs.epsoc <- labs.epsoc %>% 
   mutate(label2 = map_chr(label, toString))
@@ -82,6 +110,14 @@ epsoc %>%
   kable() %>% 
   kable_estilo()
 ```
+
+
+Distribución según estratos de muestreo
+
+```{r}
+frq(epsoc, estrato)
+```
+
 
 ## Distribución encuestado
 
@@ -197,11 +233,12 @@ epsoc %>%
   mutate(n_mean = mean(n)) %>%  
   ggplot(aes(x = time1.dmy, y = n)) +
   geom_line() +
-  geom_smooth() +
+  geom_smooth(method = 'loess', formula = y ~ x) +
   geom_hline(aes(yintercept = n_mean), colour = 'green') +
   geom_label(aes(x = min(time1.dmy)[[1]], y = n_mean[[1]], label = round(n_mean, 1))) +
   labs(title = 'Número de encuestas por día') +
-  scale_x_date(breaks = '2 weeks')
+  scale_x_date(breaks = '2 weeks') +
+  coord_cartesian(ylim = c(0, 40))
 ```
 
 ```{r}
@@ -210,11 +247,12 @@ epsoc %>%
   mutate(n_mean = mean(n)) %>%  
   ggplot(aes(x = time1.wday, y = n)) +
   geom_line() +
-  geom_smooth() +
+  geom_smooth(method = 'loess', formula = y ~ x) +
   geom_hline(aes(yintercept = n_mean), colour = 'green') +
   geom_label(aes(x = min(time1.wday)[[1]], y = n_mean[[1]], label = round(n_mean, 1))) +
   labs(title = 'Número de encuestas por día de la semana') +
-  scale_x_continuous(breaks = seq(7))
+  scale_x_continuous(breaks = seq(7)) +
+  coord_cartesian(ylim = c(0, 500))
 ```
 
 

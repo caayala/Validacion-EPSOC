@@ -4,3 +4,5 @@
 *.kml
 .RData
 .Rhistory
+ocupaciones/epsoc_ocupaciones.sav
+ocupaciones/epsoc_ocupaciones_as_label.xlsx
