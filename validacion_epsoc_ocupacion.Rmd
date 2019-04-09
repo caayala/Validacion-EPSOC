@@ -126,8 +126,6 @@ glimpse(df_ocupaciones)
 ```{r}
 nombres <- str_c(names(df_ocupaciones), get_label(df_ocupaciones), sep = ' - ')
 
-get_label(epsoc$f3a)
-
 # Grabar Excel
 df_ocupaciones %>% 
   mutate_all(to_label) %>% 
