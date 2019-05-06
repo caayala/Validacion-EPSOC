@@ -1,0 +1,74 @@
+---
+title: | 
+  | Validación EPSOC
+  | Base de tiempos y duraciones de preguntas
+author: "Equipo EPSOC"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Tiempos y duraciones
+
+De la base de estado de preguntas de SurveyToGo obtendremos el timepo de aplicación y su duración.
+
+```{r setup}
+pacman::p_load(sjlabelled, sjmisc, janitor, dplyr,
+               naniar, readxl, googlesheets, readxl,
+               haven, kableExtra, here, 
+               tidyverse)
+
+kable_estilo <- function(tabla){
+  tabla %>% 
+    kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                              full_width=F)
+}
+```
+
+```{r}
+# Lectura de bases de datos
+epsoc <- haven::read_spss('../EPSOC Base parcial con vinetas.sav')
+
+epsoc_total <- haven::read_spss('../190426 - EPSOC base completa ts dur.sav')
+
+names(epsoc_total) <- names(epsoc_total) %>% str_to_lower() %>% str_replace_all('_', '.')
+```
+
+
+Filtrar casos válidos
+
+```{r}
+epsoc_total_fil <- epsoc_total %>% 
+  filter(sbjnum %in% epsoc$sbj.num)
+
+nrow(epsoc) == nrow(epsoc_total_fil)
+```
+
+Seleccionar variables de interés
+
+```{r}
+epsoc_ts_dur <- epsoc_total_fil %>% 
+  select(sbj.num = sbjnum, i.1.orden, time1:time6) %>% 
+  arrange(sbj.num)
+
+head(epsoc_ts_dur)
+```
+
+```{r}
+epsoc_ts_dur %>% 
+  filter(sbj.num %in% c(83733275, 80243703, 84150076, 76893775)) %>% 
+  select(i.1.orden, c0.1.ts, matches('c[3-9].*(.ts$)'), -c3.orden) %>% 
+  remove_all_labels() %>% 
+  t()
+```
+
+
+```{r}
+epsoc_ts_dur %>% 
+  write_sav("../EPSOC Base timestamps.sav")
+```
+

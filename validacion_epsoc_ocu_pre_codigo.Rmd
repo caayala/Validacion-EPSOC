@@ -1,0 +1,389 @@
+---
+title: | 
+  | Validación EPSOC
+  | Base de ocupaciones para codificación 
+author: "Equipo EPSOC"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Codificación de datos
+
+El proceso de codificación de preguntas abiertas es trabajo-intensivo y consiste en asignar códigos preespecificados a las respuestas a preguntas abiertas entregadas por los entrevistados.
+
+DESUC codificará la variable “*ocupación/oficio*” de acuerdo al código `CIUO 2008` y la variable “*rama de actividad económica*” de acuerdo al código `CIIU Rev4`. La codificación de ocupación se realizará a 4 dígitos, mientras que la codificación de rama económica se realizará a 2 dígitos.
+
+Para esta tarea DESUC cuenta con codificadores y supervisores altamente calificados a los que se pide una doble codificación de las respuestas para revisar la confiabilidad a través de chequeos entre pares. Luego de una limpieza general de los registros, este trabajo se realizará manualmente en dependencias de DESUC.
+
+DESUC también dará uniformidad a la denominación de las variables nominales incluyendo los siguientes criterios de estandarización para las respuestas a preguntas abiertas sugeridos en los TdR:
+
+1. Se pasarán todos los textos a minúscula.
+2. La misma palabra en masculino o femenino debe ser considerada como una sola. categoría, por ejemplo, profesor o profesora, debe estar en una categoría profesor(a).
+3. Eliminar los espacios en blanco entre palabras o letras según corresponde.
+4. Eliminar las faltas de ortografías.
+
+La tarea de limpieza y uniformización de estas variables se realizará asistido por un paquete de R especializado en análisis cuantitativo de texto.
+
+Al finalizar el proceso, DESUC elaborará una minuta con los resultados del proceso de codificación de datos, el personal que participó en la codificación, los mecanismos de control de calidad y los resultados del proceso de codificación.
+
+> Entrega 5.1: Minuta Procesamiento de Datos (formato DOCX).
+
+```{r setup}
+pacman::p_load(lubridate, anytime, chron,
+               sjlabelled, sjmisc, janitor,
+               validate, naniar, googlesheets, readxl,
+               haven, kableExtra, here, 
+               tidyverse)
+
+epsoc <-haven::read_spss('../EPSOC Base parcial con vinetas.sav')
+```
+
+
+```{r funciones}
+kable_estilo <- function(tabla){
+  tabla %>% 
+    kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                              full_width=F)
+}
+```
+
+
+# Ocupación/oficio
+
+Para el trabajo con las preguntas de ocupación y oficio se prepara una base especial para el equipo codificador. En ella, aparte de las preguntas a codificar se agrega información adicional útil para distinguir entre distintos códigos.
+
+
+## Nivel educacional
+
+```{r}
+frq(epsoc, f1)
+```
+
+
+## Actividad principal durante el último mes
+
+```{r}
+frq(epsoc$f2)
+```
+
+## Autopercepción de clase social
+
+```{r}
+frq(epsoc$f16)
+```
+
+Cruce entre autopercepción de clases social y barrio en el que vive
+
+```{r}
+flat_table(epsoc, f16, f17, margin = 'cell')
+```
+
+```{r}
+frq(epsoc, f21)
+```
+
+
+# Base de datos
+
+Se separan las variables de interés para la calificación de la ocupación (`f3`) y la rama de actividad económica (`f4`).
+
+```{r}
+df_ocupaciones <- epsoc %>% 
+  select(folio, nombre.seleccionado,
+         edad.seleccionado, sexo.seleccionado, situacion.laboral.seleccionado,
+         estrato,
+         f1, f2,
+         f3a, # ¿Cuál es su ocupación u oficio en su trabajo?
+         f3b, # ¿Cuál era su ocupación u oficio en su último trabajo?
+         f4a, # ¿A qué rubro o giro de actividad se dedica principalmente la empresa, institución o negocio para el cual trabaja? 
+         f4b, # ¿A qué rubro o giro de actividad se dedicaba principalmente la empresa, institución o negocio para el cual trabajaba? 
+         f5a, # ¿Cuántas personas trabajan en la empresa, institución o negocio donde usted trabaja?
+         f5b,
+         f7a, # En su trabajo o negocio principal, ¿usted trabaja como?
+         f7b,
+         f12, # ¿Cotizó durante el mes pasado en algún sistema previsional (sistema de pensiones)?
+         f16, # ¿Con cuál de estos grupos (clases sociales) se identifica más usted?
+         f17,
+         f18, # Cuando usted tenía 15 años, ¿a qué se dedicaba su padre? 
+         f19, # ¿Cuál era el oficio u ocupación de su padre cuando usted tenía 15 años? Describa sus principales tareas y funciones en el puesto de trabajo
+         f20, # Cuando usted tenía 15 años, ¿a qué se dedicaba su madre?
+         f21, # ¿Cuál era el oficio u ocupación de su madre cuando usted tenía 15 años?  Describa sus principales tareas y funciones en el puesto de trabajo 
+         f22)
+
+df_ocupaciones <- df_ocupaciones %>% 
+  mutate_if(is.character, 
+            ~str_squish(.) %>% str_to_lower())
+
+df_ocupaciones <- copy_labels(df_ocupaciones, 
+                              epsoc)
+
+glimpse(df_ocupaciones)
+```
+
+```{r}
+df_ocupaciones <- df_ocupaciones %>% 
+  mutate(folio = as.numeric(folio))
+```
+
+# Se baja la base de Google Sheets para saber a qué casos hay que llamar
+ 
+```{r}
+bd_llamados <- gs_title("EPSOC - Ocupaciones")
+
+bd_llamados <- gs_read_csv(bd_llamados)
+```
+
+```{r}
+bd_llamados2 <- bd_llamados %>% 
+  mutate(cod_f3a_ciuo08_2    = !is.na(cod_f3a_ciuo08),
+         cod_f3b_ciuo08_2    = !is.na(cod_f3b_ciuo08),
+         cod_f4a_ciiu_rev4_2 = !is.na(cod_f4a_ciiu_rev4),
+         cod_f4b_ciiu_rev4_2 = !is.na(cod_f4b_ciiu_rev4),
+         llamar = (cod_f3a_ciuo08_2 + cod_f3b_ciuo08_2 + cod_f4a_ciiu_rev4_2 + cod_f4b_ciiu_rev4_2))
+```
+
+```{r}
+bd_llamados3 <- bd_llamados2 %>% 
+  transmute(folio = as.numeric(`folio - Folio`),
+         cod_f3a_ciuo08_2,
+         cod_f3b_ciuo08_2,
+         cod_f4a_ciiu_rev4_2,
+         cod_f4b_ciiu_rev4_2,
+         llamar) %>% 
+  var_labels(folio = 'Folio')
+```
+
+# Se lee la base donde están los datos de contacto
+
+```{r lectura datos contacto}
+datos_contacto <- haven::read_spss('../190404 - EPSOC base bruta.sav')
+
+datos_contacto <- datos_contacto %>% 
+  transmute(folio = as.numeric(I_1_folio),
+            telefono = T_contacto_1) %>% 
+  var_labels(folio = 'Folio') %>% 
+  arrange(folio)
+```
+
+# Se crea una base con la información relevante
+
+```{r}
+df_ocupaciones2 <- left_join(df_ocupaciones,
+                            bd_llamados3,
+                            by = 'folio')
+```
+
+```{r}
+df_ocupaciones2 <- left_join(df_ocupaciones2,
+                             datos_contacto,
+                             by = 'folio')
+```
+
+```{r}
+df_ocupaciones2 <- df_ocupaciones2 %>% 
+  select(folio,
+         nombre.seleccionado,
+         edad.seleccionado,
+         sexo.seleccionado,
+         situacion.laboral.seleccionado,
+         estrato,
+         f1,
+         f2,
+         f3a,
+         cod_f3a_ciuo08_2,
+         f3b,
+         cod_f3b_ciuo08_2,
+         f4a,
+         cod_f4a_ciiu_rev4_2,
+         f4b,
+         cod_f4b_ciiu_rev4_2,
+         f5a,
+         f5b,
+         f7a,
+         f7b,
+         f12,
+         f16,
+         f17,
+         f18,
+         f19,
+         f20,
+         f21,
+         f22,
+         llamar,
+         telefono)
+```
+
+# Grabación de datos
+
+```{r}
+nombres <- str_c(names(df_ocupaciones2), get_label(df_ocupaciones2), sep = ' - ')
+
+# Grabar Excel
+df_ocupaciones2 %>% 
+  mutate_all(to_label) %>% 
+  rename_all(~nombres) %>% 
+  writexl::write_xlsx('ocupaciones/epsoc_ocupaciones_as_label.xlsx')
+
+# Grabar SPSS
+df_ocupaciones2 %>%
+  write_sav('ocupaciones/epsoc_ocupaciones.sav')
+```
+
+Hay que tener cuidado grabando Sheet, porque se guarda un archivo nuevo cada vez que se aplica este comando
+
+```{r}
+# Grabar Sheet
+ #df_ocupaciones2 <- gs_upload('ocupaciones/epsoc_ocupaciones_as_label.xlsx', sheet_title = "EPSOC - Llamados")
+```
+
+Una vez que se tenga la primera parte de los códigos, corresponde integrarlo con la base de datos de recuperaciones
+
+# Lectura de base con datos recuperados para agregar a base ocupaciones
+
+```{r}
+gs_ls()
+
+df_recuperados <- gs_title("EPSOC - Llamados")
+gs_ws_ls(df_recuperados)
+df_recuperados <- gs_read_csv(df_recuperados)
+```
+
+```{r}
+df_recuperados <- df_recuperados %>% 
+  filter(`llamar -` > 0)
+
+names(df_recuperados)
+```
+
+```{r}
+df_recuperados <- df_recuperados %>% 
+  clean_names() %>% 
+  rename('f1' = f1_cual_es_su_nivel_educacional_indique_el_tipo_de_estudio_actual_si_estudia_actualmente_o_el_ultimo_tipo_aprobado_si_no_estudia_actualmente,
+         'f2' = f2_cual_de_estas_situaciones_describe_mejor_su_actividad_principal_durante_el_ultimo_mes,
+         'f3a' = f3a_cual_es_su_ocupacion_u_oficio_en_su_trabajo_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo_actual_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas_enfermera,
+         'f3b' = f3b_cual_era_su_ocupacion_u_oficio_en_su_ultimo_trabajo_describa_las_principales_tareas_y_funciones_en_su_ultimo_puesto_de_trabajo_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas,  
+         'f4a' = f4a_a_que_rubro_o_giro_de_actividad_se_dedica_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabaja_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica,                       
+         'f4b' = f4b_a_que_rubro_o_giro_de_actividad_se_dedicaba_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabajaba_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica,                  
+         'f5a' = f5a_cuantas_personas_trabajan_en_la_empresa_institucion_o_negocio_donde_usted_trabaja,
+         'f5b' = f5b_cuantas_personas_trabajaban_en_la_empresa_institucion_o_negocio_donde_usted_trabajaba,
+         'f7a' = f7a_en_su_trabajo_o_negocio_principal_usted_trabaja_como,                                                                                      
+         'f7b' = f7b_en_su_ultimo_trabajo_o_negocio_principal_usted_trabajaba_como,
+         'f12' = f12_cotizo_durante_el_mes_pasado_en_algun_sistema_previsional_sistema_de_pensiones,
+         'f16' = f16_habitualmente_se_habla_de_que_la_sociedad_esta_dividida_en_distintos_grupos_o_clases_sociales_con_cual_de_estos_grupos_se_identifica_mas_usted_leer_alternativas,                                                                                
+         'f17' = f17_y_en_su_barrio_usted_diria_que_la_mayoria_de_las_personas_pertenecen_a_cual_de_estos_grupos_leer_alternativas,
+         'f18' = f18_cuando_usted_tenia_15_anos_a_que_se_dedicaba_su_padre,
+         'f19' = f19_cual_era_el_oficio_u_ocupacion_de_su_padre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo, 
+         'f20' = f20_cuando_usted_tenia_15_anos_a_que_se_dedicaba_su_madre,
+         'f21' = f21_cual_era_el_oficio_u_ocupacion_de_su_madre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo,
+         'f22' = f22_tiene_usted_hijos_o_hijas_cuantos_as) %>% 
+  select(folio,
+         f3a,
+         cod_f3a_ciuo08_2,
+         f3b,
+         cod_f3b_ciuo08_2,
+         f4a,
+         cod_f4a_ciiu_rev4_2,
+         f4b,
+         cod_f4b_ciiu_rev4_2,
+         estado_llamado)
+
+names(df_recuperados)
+```
+
+```{r}
+df_recuperados2 <- df_recuperados %>% 
+  filter(estado_llamado == 'Recuperado')
+```
+
+
+# Lectura de base de ocupaciones
+
+```{r}
+df_ocu_post <- read_excel('../Validacion-EPSOC/ocupaciones/epsoc_ocupaciones_as_label_20190413.xlsx') %>% 
+  clean_names() %>% 
+  rename('folio' = folio_folio,
+         'f1' = f1_cual_es_su_nivel_educacional_indique_el_tipo_de_estudio_actual_si_estudia_actualmente_o_el_ultimo_tipo_aprobado_si_no_estudia_actualmente ,
+         'f2' = f2_cual_de_estas_situaciones_describe_mejor_su_actividad_principal_durante_el_ultimo_mes ,
+         'f5a' = f5a_cuantas_personas_trabajan_en_la_empresa_institucion_o_negocio_donde_usted_trabaja ,
+         'f5b' = f5b_cuantas_personas_trabajaban_en_la_empresa_institucion_o_negocio_donde_usted_trabajaba ,
+         'f7a' = f7a_en_su_trabajo_o_negocio_principal_usted_trabaja_como,
+         'f7b' = f7b_en_su_ultimo_trabajo_o_negocio_principal_usted_trabajaba_como ,
+         'f12' = f12_cotizo_durante_el_mes_pasado_en_algun_sistema_previsional_sistema_de_pensiones,
+         'f16' = f16_habitualmente_se_habla_de_que_la_sociedad_esta_dividida_en_distintos_grupos_o_clases_sociales_con_cual_de_estos_grupos_se_identifica_mas_usted_leer_alternativas,
+         'f17' = f17_y_en_su_barrio_usted_diria_que_la_mayoria_de_las_personas_pertenecen_a_cual_de_estos_grupos_leer_alternativas ,
+         'f22' = f22_tiene_usted_hijos_o_hijas_cuantos_as)
+
+df_ocu_cod<- df_ocu_post %>% 
+  select(folio, starts_with('cod_')) %>% 
+  naniar::replace_with_na_at(vars(starts_with('cod_')), condition = ~.x %in% c(999, 9999))
+
+df_ocu_cod %>% 
+  gather('variable', 'codigo', -folio) %>% 
+  group_by(variable) %>% 
+  summarise(total = n(),
+            codigo_no_na = sum(!is.na(codigo)))
+```
+
+# Pegado de base de recuperadas
+
+```{r}
+df_ocu_post2 <- left_join(df_ocu_post,
+            df_recuperados2,
+            by = 'folio')
+names(df_ocu_post2)
+```
+
+# Pegado de variables recuperadas dentro de la base
+
+```{r}
+df_ocu_post2 <- df_ocu_post2 %>% 
+  mutate(cod_f3a_ciuo08_2 = ifelse((is.na(cod_f3a_ciuo08_2)),0,cod_f3a_ciuo08_2),
+         cod_f3b_ciuo08_2 = ifelse((is.na(cod_f3b_ciuo08_2)),0,cod_f3b_ciuo08_2),
+         cod_f4a_ciiu_rev4_2 = ifelse((is.na(cod_f4a_ciiu_rev4_2)),0,cod_f4a_ciiu_rev4_2),
+         cod_f4b_ciiu_rev4_2 = ifelse((is.na(cod_f4b_ciiu_rev4_2)),0,cod_f4b_ciiu_rev4_2),
+         f3a_2 = ifelse(cod_f3a_ciuo08_2 == 1,f3a,f3a_cual_es_su_ocupacion_u_oficio_en_su_trabajo_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo_actual_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas_enfermera),
+         f3b_2 = ifelse(cod_f3b_ciuo08_2 == 1,f3b,f3b_cual_era_su_ocupacion_u_oficio_en_su_ultimo_trabajo_describa_las_principales_tareas_y_funciones_en_su_ultimo_puesto_de_trabajo_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas),
+         f4a_2 = ifelse(cod_f4a_ciiu_rev4_2 == 1,f4a,f4a_a_que_rubro_o_giro_de_actividad_se_dedica_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabaja_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica),
+         f4b_2 = ifelse(cod_f4b_ciiu_rev4_2 == 1,f4b,f4b_a_que_rubro_o_giro_de_actividad_se_dedicaba_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabajaba_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica)) %>% 
+  select(-f3a_cual_es_su_ocupacion_u_oficio_en_su_trabajo_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo_actual_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas_enfermera,
+         -f3a,
+         -f3b,
+         -f3b_cual_era_su_ocupacion_u_oficio_en_su_ultimo_trabajo_describa_las_principales_tareas_y_funciones_en_su_ultimo_puesto_de_trabajo_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas,
+         -f4a_a_que_rubro_o_giro_de_actividad_se_dedica_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabaja_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica,
+         -f4a,
+         -f4b,
+         -f4b_a_que_rubro_o_giro_de_actividad_se_dedicaba_principalmente_la_empresa_institucion_o_negocio_para_el_cual_trabajaba_ejemplo_fabrica_de_zapatos_reparacion_de_automoviles_comercio_de_libros_o_alguna_otra_actividad_economica,
+         -estado_llamado) %>% 
+  rename('f3a' = f3a_2,
+         'f3b' = f3b_2,
+         'f4a' = f4a_2,
+         'f4b' = f4b_2) %>% 
+  arrange(folio)
+
+  names(df_ocu_post2)
+```
+
+```{r}
+df_ocu_post2 <- copy_labels(df_ocu_post2, 
+                              epsoc)
+nombres <- str_c(names(df_ocu_post2), get_label(df_ocu_post2), sep = ' - ')
+
+# Grabar Excel
+df_ocu_post2 %>% 
+  mutate_all(to_label) %>% 
+  rename_all(~nombres) %>% 
+  writexl::write_xlsx('ocupaciones/epsoc_ocupaciones_as_label_20190416.xlsx')
+
+# Grabar SPSS
+df_ocu_post2 %>%
+  write_sav('ocupaciones/epsoc_ocupaciones_2.sav')
+```
+
+
+
+

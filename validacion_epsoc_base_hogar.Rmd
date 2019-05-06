@@ -1,0 +1,202 @@
+---
+title: "EPSOC - Base hogar"
+author: "Supervisión"
+date: "11-04-2019"
+output: html_document
+---
+
+# Lectura de base y renombrado de variable para pegar más tarde
+
+```{r setup}
+pacman::p_load(tidyverse, lubridate, anytime, chron,
+               haven, sf,
+               sjlabelled, sjmisc, 
+               validate, eeptools, kableExtra, janitor, here, naniar,
+               captioner)
+
+bd_hogar <- read_sav("../EPSOC Base hogar.sav")
+```
+
+```{r}
+bd_hogar <- bd_hogar %>% 
+  remove_var(I_1_I_1_I_1_Edad_rango,
+             I_1_I_1_I_2_Edad_rango,
+             I_1_I_1_I_3_Edad_rango,
+             I_1_I_1_I_4_Edad_rango,
+             I_1_I_1_I_5_Edad_rango,
+             I_1_I_1_I_6_Edad_rango,
+             I_1_I_1_I_7_Edad_rango,
+             I_1_I_1_I_8_Edad_rango,
+             I_1_I_1_I_9_Edad_rango,
+             I_1_I_1_I_10_Edad_rango,
+             I_1_I_1_I_11_Edad_rango,
+             I_1_I_1_I_12_Edad_rango)
+```
+
+# Cálculo de personas elegibles en hogar
+```{r}
+chance_numero <- function(x){
+  if_else(x < 0, 0, as.numeric(x)) 
+}
+
+chance_numero(6)
+
+bd_hogar <- bd_hogar %>% 
+  mutate(prob_1 = (I_1_I_1_I_1_chance_ele > 0),
+         prob_2 = (I_1_I_1_I_2_chance_ele > 0),
+         prob_3 = (I_1_I_1_I_3_chance_ele > 0),
+         prob_4 = (I_1_I_1_I_4_chance_ele > 0),
+         prob_5 = (I_1_I_1_I_5_chance_ele > 0),
+         prob_6 = (I_1_I_1_I_6_chance_ele > 0),
+         prob_7 = (I_1_I_1_I_7_chance_ele > 0),
+         prob_8 = (I_1_I_1_I_8_chance_ele > 0),
+         prob_9 = (I_1_I_1_I_9_chance_ele > 0),
+         prob_10 = (I_1_I_1_I_10_chance_ele > 0),
+         prob_11 = (I_1_I_1_I_11_chance_ele > 0),
+         prob_12 = (I_1_I_1_I_12_chance_ele > 0)) %>% 
+  sjmisc::row_sums(starts_with('prob_'), n = 1, var = 'elegibles') %>% 
+  mutate_at(vars(matches('^I_1_I_1_I_\\d{1,2}_chance_ele$')), chance_numero) %>% 
+  sjmisc::row_sums(matches('^I_1_I_1_I_\\d{1,2}_chance_ele$'), n = 1, var = 'suma_prob')
+
+bd_hogar %>% 
+  select(elegibles, suma_prob, matches('^I_1_I_1_I_\\d{1,2}_chance_ele$'))
+
+```
+
+# Comparación de elegibles con miembros
+
+```{r}
+bd_epsoc <- read_sav("../EPSOC Base parcial con vinetas.sav") %>% 
+  select(sbj.num,
+         personas.hogar) %>% 
+  mutate(SbjNum = as.numeric(sbj.num)) %>% 
+  remove_var(sbj.num) %>% 
+  select(SbjNum,
+         personas.hogar)
+```
+
+```{r}
+bd_hogar2 <- bd_hogar %>% 
+  left_join(bd_epsoc,
+            bd_hogar,
+            by = 'SbjNum')
+```
+ 
+```{r}
+bd_hogar2 %>% 
+  mutate(dif = personas.hogar - elegibles) %>% 
+  mutate(err = ifelse((dif < 0),1,0)) %>% 
+  frq(err)
+```
+
+# Obtención de la posición del seleccionado en el hogar
+
+## Cálculo de variable 'seleccionado'
+
+```{r}
+bd_hogar <- bd_hogar %>% 
+  mutate(selec_1 = str_c(I_1_I_1_I_1_Nombre,I_1_I_1_I_1_Sexo,I_1_I_1_I_1_Edad),
+         selec_2 = str_c(I_1_I_1_I_2_Nombre,I_1_I_1_I_2_Sexo,I_1_I_1_I_2_Edad),
+         selec_3 = str_c(I_1_I_1_I_3_Nombre,I_1_I_1_I_3_Sexo,I_1_I_1_I_3_Edad),
+         selec_4 = str_c(I_1_I_1_I_4_Nombre,I_1_I_1_I_4_Sexo,I_1_I_1_I_4_Edad),
+         selec_5 = str_c(I_1_I_1_I_5_Nombre,I_1_I_1_I_5_Sexo,I_1_I_1_I_5_Edad),
+         selec_6 = str_c(I_1_I_1_I_6_Nombre,I_1_I_1_I_6_Sexo,I_1_I_1_I_6_Edad),
+         selec_7 = str_c(I_1_I_1_I_7_Nombre,I_1_I_1_I_7_Sexo,I_1_I_1_I_7_Edad),
+         selec_8 = str_c(I_1_I_1_I_8_Nombre,I_1_I_1_I_8_Sexo,I_1_I_1_I_8_Edad),
+         selec_9 = str_c(I_1_I_1_I_9_Nombre,I_1_I_1_I_9_Sexo,I_1_I_1_I_9_Edad),
+         selec_10 = str_c(I_1_I_1_I_10_Nombre,I_1_I_1_I_10_Sexo,I_1_I_1_I_10_Edad),
+         selec_11 = str_c(I_1_I_1_I_11_Nombre,I_1_I_1_I_11_Sexo,I_1_I_1_I_11_Edad),
+         selec_12 = str_c(I_1_I_1_I_12_Nombre,I_1_I_1_I_12_Sexo,I_1_I_1_I_12_Edad),
+         selec_b = str_c(I_1_I_1_Nombre_seleccionado,I_1_I_1_Sexo_seleccionado,I_1_I_1_Edad_seleccionado))
+
+         
+```
+
+
+```{r}
+bd_hogar <- bd_hogar %>% 
+  mutate(S1 = ifelse((selec_b == selec_1),1,0),
+         S2 = ifelse((selec_b == selec_2),1,0),
+         S3 = ifelse((selec_b == selec_3),1,0),
+         S4 = ifelse((selec_b == selec_4),1,0),
+         S5 = ifelse((selec_b == selec_5),1,0),
+         S6 = ifelse((selec_b == selec_6),1,0),
+         S7 = ifelse((selec_b == selec_7),1,0),
+         S8 = ifelse((selec_b == selec_8),1,0),
+         S9 = ifelse((selec_b == selec_9),1,0),
+         S10 = ifelse((selec_b == selec_10),1,0),
+         S11 = ifelse((selec_b == selec_11),1,0),
+         S12 = ifelse((selec_b == selec_12),1,0))
+
+```
+
+```{r}
+bd_hogar <- bd_hogar %>% 
+  mutate(chance_seleccionado_1 = ifelse ((S1 == 1),I_1_I_1_I_1_chance_ele,0),
+         chance_seleccionado_2 = ifelse ((S2 == 1),I_1_I_1_I_2_chance_ele,0),
+         chance_seleccionado_3 = ifelse ((S3 == 1),I_1_I_1_I_3_chance_ele,0),
+         chance_seleccionado_4 = ifelse ((S4 == 1),I_1_I_1_I_4_chance_ele,0),
+         chance_seleccionado_5 = ifelse ((S5 == 1),I_1_I_1_I_5_chance_ele,0),
+         chance_seleccionado_6 = ifelse ((S6 == 1),I_1_I_1_I_6_chance_ele,0),
+         chance_seleccionado_7 = ifelse ((S7 == 1),I_1_I_1_I_7_chance_ele,0),
+         chance_seleccionado_8 = ifelse ((S8 == 1),I_1_I_1_I_8_chance_ele,0),
+         chance_seleccionado_9 = ifelse ((S9 == 1),I_1_I_1_I_9_chance_ele,0),
+         chance_seleccionado_10 = ifelse ((S10 == 1),I_1_I_1_I_10_chance_ele,0),
+         chance_seleccionado_11 = ifelse ((S11 == 1),I_1_I_1_I_11_chance_ele,0),
+         chance_seleccionado_12 = ifelse ((S12 == 1),I_1_I_1_I_12_chance_ele,0)) %>% 
+  mutate(chance_seleccionado_1 = ifelse(is.na(chance_seleccionado_1),0,chance_seleccionado_1),
+         chance_seleccionado_2 = ifelse(is.na(chance_seleccionado_2),0,chance_seleccionado_2),
+         chance_seleccionado_3 = ifelse(is.na(chance_seleccionado_3),0,chance_seleccionado_3),
+         chance_seleccionado_4 = ifelse(is.na(chance_seleccionado_4),0,chance_seleccionado_4),
+         chance_seleccionado_5 = ifelse(is.na(chance_seleccionado_5),0,chance_seleccionado_5),
+         chance_seleccionado_6 = ifelse(is.na(chance_seleccionado_6),0,chance_seleccionado_6),
+         chance_seleccionado_7 = ifelse(is.na(chance_seleccionado_7),0,chance_seleccionado_7),
+         chance_seleccionado_8 = ifelse(is.na(chance_seleccionado_8),0,chance_seleccionado_8),
+         chance_seleccionado_9 = ifelse(is.na(chance_seleccionado_9),0,chance_seleccionado_9),
+         chance_seleccionado_10 = ifelse(is.na(chance_seleccionado_10),0,chance_seleccionado_10),
+         chance_seleccionado_11 = ifelse(is.na(chance_seleccionado_11),0,chance_seleccionado_11),
+         chance_seleccionado_12 = ifelse(is.na(chance_seleccionado_12),0,chance_seleccionado_12)) %>% 
+  mutate(chance_seleccionado_1 = as.numeric(chance_seleccionado_1),
+         chance_seleccionado_2 = as.numeric(chance_seleccionado_2),
+         chance_seleccionado_3 = as.numeric(chance_seleccionado_3),
+         chance_seleccionado_4 = as.numeric(chance_seleccionado_4),
+         chance_seleccionado_5 = as.numeric(chance_seleccionado_5),
+         chance_seleccionado_6 = as.numeric(chance_seleccionado_6),
+         chance_seleccionado_7 = as.numeric(chance_seleccionado_7),
+         chance_seleccionado_8 = as.numeric(chance_seleccionado_8),
+         chance_seleccionado_9 = as.numeric(chance_seleccionado_9),
+         chance_seleccionado_10 = as.numeric(chance_seleccionado_10),
+         chance_seleccionado_11 = as.numeric(chance_seleccionado_11),
+         chance_seleccionado_12 = as.numeric(chance_seleccionado_12))
+     
+```
+
+# Cálculo de selección para el seleccionado
+
+```{r}
+bd_hogar <- bd_hogar %>%
+  row_sums(starts_with('chance_seleccionado_'), n = 1, var = 'chance') %>% 
+  mutate(prob_persona = chance/suma_prob) %>%
+  var_labels(prob_persona = 'Probabilidad de selección de persona seleccionada') %>%
+  select(everything(), -(prob_1:chance_seleccionado_12), chance, suma_prob, elegibles) %>%
+  identity()
+
+bd_hogar %>%
+  ggplot(aes(x = elegibles)) +
+  geom_histogram() +
+  scale_y_continuous(labels = scales::percent)
+```
+
+```{r}
+bd_hogar %>% 
+  select(prob_persona, chance, suma_prob, elegibles) %>% 
+  summary()
+```
+
+
+```{r}
+bd_hogar %>% 
+  arrange(SbjNum) %>% 
+  write_sav("../EPSOC Base hogar_rec.sav")
+```
+

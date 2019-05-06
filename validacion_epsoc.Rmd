@@ -461,6 +461,37 @@ gg_ideologia_orden <- function(.data, var_orden, miss = 88){
 
 #### Ideología para ego y alter
 
+Folios con problemas en la asignación de respuestas de viñetas.
+
+```{r}
+sbj.num_correccion_orden <- epsoc %>% 
+  slice(c(132, 461, 845, 940)) %>% 
+  pull(sbj.num) %>% 
+  as.integer()
+
+sbj.num_correccion_orden <- structure(c(1L, 0L, 3L, 3L),
+                                      names= sbj.num_correccion_orden)
+
+str(sbj.num_correccion_orden)
+```
+
+Correción de `i.1.orden` par dos caso 
+
+```{r}
+epsoc <- epsoc %>% 
+  mutate(i.1.orden.bak = i.1.orden,
+         i.1.orden = if_else(sbj.num %in% names(sbj.num_correccion_orden), 
+                             sbj.num_correccion_orden[as.character(sbj.num)], 
+                             i.1.orden)) %>% 
+  var_labels(i.1.orden = 'Orden de respuesta en preguntas de viñetas. Valores corregidos',
+             i.1.orden.bak = 'Orden de respuesta en preguntas de viñetas. Valores originales')
+
+epsoc %>% 
+  filter(sbj.num %in% as.integer(names(sbj.num_correccion_orden))) %>% 
+  select(sbj.num, i.1.orden, i.1.orden.bak)
+```
+
+
 ```{r}
 ideologia_ego <- list(orden1 = c("c0.1", "c1.1.1", "c1.2.1", "c1.3.1", "c1.4.1", "c2.1.1", "c2.2.1", "c2.3.1", "c2.4.1"),
                       orden2 = c("c0.2", "c1.4.2", "c1.1.2", "c1.2.2", "c1.3.2", "c2.4.2", "c2.1.2", "c2.2.2", "c2.3.2"),
@@ -498,6 +529,7 @@ df_ideologia_ego <- copy_labels(df_new = df_ideologia_ego,
                                   select(one_of(c('folio', ideologia_ego$orden1))) %>% 
                                   rename_all(~c("folio", str_remove(ideologia_ego$orden1,'.\\d{1,2}$'))))
 ```
+
 
 Agregar variables reconstruidas a base de datos.
 
@@ -610,6 +642,13 @@ epsoc %>%
   select(i.1.orden, matches('c([3-9]|10).4$')) %>% 
   gg_ideologia_orden(i.1.orden) +
   labs(title = 'Distribución de viñetas Grandes Empresas, según orden de preguntas')
+```
+
+```{r}
+epsoc %>% 
+  filter(sbj.num %in% as.numeric(names(sbj.num_correccion_orden))) %>% 
+  select(i.1.orden, matches('c[3-9].*'), -c3.orden) %>% 
+  t()
 ```
 
 ## Recompensa justa
