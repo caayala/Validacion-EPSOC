@@ -645,10 +645,12 @@ epsoc %>%
 ```
 
 ```{r}
-epsoc %>% 
+tab_correccion_orden <- epsoc %>% 
   filter(sbj.num %in% as.numeric(names(sbj.num_correccion_orden))) %>% 
   select(i.1.orden, matches('c[3-9].*'), -c3.orden) %>% 
   t()
+
+tab_correccion_orden[str_detect(rownames(tab_correccion_orden), 'i.1.orden|c[3-4]\\.1\\.?[1-4]?$'), ]
 ```
 
 ## Recompensa justa

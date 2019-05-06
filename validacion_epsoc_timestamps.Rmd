@@ -14,7 +14,7 @@ output:
 
 # Tiempos y duraciones
 
-De la base de estado de preguntas de SurveyToGo obtendremos el timepo de aplicación y su duración.
+De la base de estado de preguntas de SurveyToGo obtendremos el tiempo de aplicación y su duración.
 
 ```{r setup}
 pacman::p_load(sjlabelled, sjmisc, janitor, dplyr,
@@ -31,7 +31,7 @@ kable_estilo <- function(tabla){
 
 ```{r}
 # Lectura de bases de datos
-epsoc <- haven::read_spss('../EPSOC Base parcial con vinetas.sav')
+epsoc <- haven::read_spss('../EPSOC Base parcial con vinetas y ocupaciones.sav')
 
 epsoc_total <- haven::read_spss('../190426 - EPSOC base completa ts dur.sav')
 

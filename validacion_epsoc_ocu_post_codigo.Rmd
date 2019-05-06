@@ -71,9 +71,8 @@ bd_ocupaciones2 <- bd_ocupaciones %>%
 ```{r}
 bd_recuperadas <- read_excel("ocupaciones/epsoc_recuperaciones.xlsx") %>% 
   clean_names() %>% 
-  transmute(folio, 
-            f19 = f19_cual_era_el_oficio_u_ocupacion_de_su_padre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo,
-            f21 = f21_cual_era_el_oficio_u_ocupacion_de_su_madre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo)
+rename('f19' = f19_cual_era_el_oficio_u_ocupacion_de_su_padre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo,
+       'f21' = f21_cual_era_el_oficio_u_ocupacion_de_su_madre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo)
 
 names(bd_recuperadas)
 ```
@@ -97,6 +96,7 @@ epsoc_2 <- epsoc %>%
 epsoc_3 <- left_join(epsoc_2,
                      bd_ocupaciones2,
                      by = 'folio')
+
 ```
 
 
@@ -104,8 +104,6 @@ epsoc_3 <- left_join(epsoc_2,
 epsoc_3 <- left_join(epsoc_3,
                      bd_recuperadas,
                      by = 'folio')
-
-names(epsoc_3)
 ```
 
 # Homologación de códigos de supervisión telefónica
