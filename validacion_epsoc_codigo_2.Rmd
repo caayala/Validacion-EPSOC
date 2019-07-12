@@ -1,0 +1,72 @@
+---
+title: | 
+  | Validación EPSOC
+  | Integrar códigos de ocupación de padre y madre
+author: "Equipo EPSOC"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Codificación de datos
+
+El proceso de codificación de preguntas abiertas es trabajo-intensivo y consiste en asignar códigos preespecificados a las respuestas a preguntas abiertas entregadas por los entrevistados.
+
+DESUC codificará la variable “*ocupación/oficio*” de acuerdo al código `CIUO 2008` y la variable “*rama de actividad económica*” de acuerdo al código `CIIU Rev4`. La codificación de ocupación se realizará a 4 dígitos, mientras que la codificación de rama económica se realizará a 2 dígitos.
+
+Este script integra la codificación hecha a la base de datos de epsoc.
+
+
+```{r setup}
+pacman::p_load(sjlabelled, sjmisc, janitor,
+               naniar, readxl, readxl,
+               haven, kableExtra, 
+               tidyverse)
+
+epsoc <-haven::read_spss('../EPSOC Base parcial con vinetas y ocupaciones.sav')
+```
+
+# Selección de variables a codificar
+
+```{r}
+epsoc_ocup <- epsoc %>% 
+  mutate(cod.f19 = as.numeric(NA_character_),
+         cod.f21 = as.numeric(NA_character_)) %>% 
+  select(folio,
+         sbj.num,
+         nombre.seleccionado,
+         edad.seleccionado,
+         situacion.laboral.seleccionado,
+         f13, # Educación del padre,
+         f18, # A qué se dedicaba el padre
+         f19, # Ocupación del padre
+         cod.f19,
+         f14, # Educación de la madre
+         f20, # A qué se dedicaba la madre
+         f21, # Ocupación de la madre
+         cod.f21)
+
+epsoc_ocup <- copy_labels(epsoc_ocup,
+                          epsoc)
+glimpse(epsoc_ocup)
+```
+
+
+# Grabado de base para codificar
+
+```{r}
+nombres <- str_c(names(epsoc_ocup), get_label(epsoc_ocup), sep = ' - ')
+
+epsoc_ocup %>% 
+  mutate_all(to_label) %>% 
+  rename_all(~nombres) %>% 
+  writexl::write_xlsx("../Validacion-EPSOC/ocupaciones/ocupaciones_padres/190626 - Base para ocupaciones padres.xlsx")
+
+epsoc_ocup %>% 
+  write_sav("../Validacion-EPSOC/ocupaciones/ocupaciones_padres/base_para_ocupaciones_padres.sav")
+```
+

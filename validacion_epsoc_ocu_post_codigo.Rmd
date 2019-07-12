@@ -31,19 +31,10 @@ epsoc <-haven::read_spss('../EPSOC Base parcial con vinetas.sav')
 ```
 
 
-```{r funciones}
-kable_estilo <- function(tabla){
-  tabla %>% 
-    kableExtra::kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                              full_width=F)
-}
-```
-
-
-# Lectura de base codificada
+# Lectura de base codificada de encuestado
 
 ```{r}
-bd_ocupaciones <- read_excel("ocupaciones/epsoc_ocupaciones_as_label_20190417.xlsx") %>% 
+bd_ocupaciones <- read_excel("ocupaciones/ocupaciones_encuestado/epsoc_ocupaciones_as_label_20190417.xlsx") %>% 
   rename('folio' = `folio - Folio`) %>% 
   mutate(folio = as.numeric(folio)) %>% 
   clean_names()
@@ -53,7 +44,7 @@ names(bd_ocupaciones)
 
 
 ```{r}
-bd_ocupaciones2 <- bd_ocupaciones %>% 
+bd_ocupaciones_enc <- bd_ocupaciones %>% 
   transmute(folio, 
             'f3a' = f3a_cual_es_su_ocupacion_u_oficio_en_su_trabajo_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo_actual_ejemplo_mecanico_a_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas_enfermera,
             'f3b' = f3b_cual_era_su_ocupacion_u_oficio_en_su_ultimo_trabajo_describa_las_principales_tareas_y_funciones_en_su_ultimo_puesto_de_trabajo_ejemplo_mecanico_automotriz_en_taller_de_reparacion_empleado_de_contabilidad_duena_de_casa_recolector_de_frutas,
@@ -66,17 +57,31 @@ bd_ocupaciones2 <- bd_ocupaciones %>%
   naniar::replace_with_na_at(vars(starts_with('cod.')), condition = ~.x %in% c(999, 9999))
 ```
 
+
 # Lectura de base de datos de recuperaciones telefónicas
 
+Recuperación de oficio u ocupación de padre y madre cuando tenía 15 años.
+
 ```{r}
-bd_recuperadas <- read_excel("ocupaciones/epsoc_recuperaciones.xlsx") %>% 
+bd_recuperadas_padres <- read_excel("ocupaciones/ocupaciones_encuestado/epsoc_recuperaciones.xlsx") %>% 
   clean_names() %>% 
 rename('f19' = f19_cual_era_el_oficio_u_ocupacion_de_su_padre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo,
        'f21' = f21_cual_era_el_oficio_u_ocupacion_de_su_madre_cuando_usted_tenia_15_anos_describa_sus_principales_tareas_y_funciones_en_el_puesto_de_trabajo)
 
-names(bd_recuperadas)
+names(bd_recuperadas_padres)
 ```
 
+# Lectura de base codificada de padre y madre
+
+```{r}
+bd_ocupaciones_padres <- read_excel("ocupaciones/ocupaciones_padres/190626 - Base para ocupaciones padres CODIFICADO.xlsx") %>%
+  clean_names() %>% 
+  select_at(vars(folio_folio, starts_with('cod_')), ~c('folio', 'cod.f19', 'cod.f21')) %>% 
+  naniar::replace_with_na_all(condition = ~. %in% c(0, 999, 9999))
+```
+
+
+Base EPSOC sin las variables de ocupación recuperadas y codificadas. 
 
 ```{r}
 epsoc_2 <- epsoc %>% 
@@ -92,27 +97,38 @@ epsoc_2 <- epsoc %>%
 
 # Unión de bases (EPSOC, ocupaciones y recuperaciones)
 
+Agregar a la base de EPSOC las variables recuperadas y codificadas sobre la personas encuestada.
+
 ```{r}
 epsoc_3 <- left_join(epsoc_2,
-                     bd_ocupaciones2,
+                     bd_ocupaciones_enc,
                      by = 'folio')
-
 ```
 
+Agregar a la base de EPSOC las variables recuperadas sobre la ocupación de padre y madre.
 
 ```{r}
 epsoc_3 <- left_join(epsoc_3,
-                     bd_recuperadas,
+                     bd_recuperadas_padres,
                      by = 'folio')
 ```
+
+Agregar la codificación de ocupación de padre y madre.
+
+```{r}
+epsoc_3 <- left_join(epsoc_3,
+                     bd_ocupaciones_padres,
+                     by = 'folio')
+```
+
 
 # Homologación de códigos de supervisión telefónica
 
 ```{r}
 epsoc_3 <- epsoc_3 %>% 
-  mutate(estado.sup = ifelse((estado_llamado_2 == estado.sup), estado.sup,0),
+  mutate(estado.sup = ifelse((estado_llamado_2 == estado.sup), estado.sup, 0),
          estado.sup = ifelse((estado.sup == 0), estado_llamado_2, estado.sup)) %>% 
-  remove_var(estado_llamado_2) %>% 
+  select(-estado_llamado_2) %>% 
   val_labels(estado.sup = c("Aceptada" = 1, 
                             "No contesta o no abre la puerta" = 2, 
                             "Número no válido o no se puede ubicar dirección" = 3))
@@ -130,8 +146,10 @@ epsoc_3 <- epsoc_3 %>%
              f4b = "¿A qué rubro o giro de actividad se dedicaba principalmente la empresa, institución o negocio para el cual trabajaba?   Ejemplo: Fábrica de zapatos, reparación de automóviles, comercio de libros o alguna otra actividad económica.",
              cod.f4b = "Código rubro último trabajo",
              f19 = "¿Cuál era el oficio u ocupación de su padre cuando usted tenía 15 años? Describa sus principales tareas y funciones en el puesto de trabajo.",
+             cod.f19 = "¿Cuál era el oficio u ocupación de su padre cuando usted tenía 15 años? Describa sus principales tareas y funciones en el puesto de trabajo.",
              f21 = "¿Cuál era el oficio u ocupación de su madre cuando usted tenía 15 años?  Describa sus principales tareas y funciones en el puesto de trabajo.",
-             estado.sup = "Estado de supervisión post terreno") %>% 
+             cod.f21 = "¿Cuál era el oficio u ocupación de su madre cuando usted tenía 15 años?  Describa sus principales tareas y funciones en el puesto de trabajo.",
+             estado.sup = "Estado de supervisión post terreno") %>%
   select(folio,
          sbj.num,
          personas.hogar,
@@ -464,8 +482,10 @@ epsoc_3 <- epsoc_3 %>%
          f17,
          f18,
          f19,
+         cod.f19,
          f20,
          f21,
+         cod.f21,
          f22,
          f23,
          f24.o1,
@@ -542,7 +562,6 @@ epsoc_3 <- epsoc_3 %>%
          c10.3,
          c10.4)
 ```
-
 
 ```{r}
 epsoc_3 %>% 
